@@ -3,6 +3,7 @@
 import os
 import tempfile
 import shutil
+import sys
 from pptx import Presentation
 from pptx.util import Inches
 from pptx.dml.color import RGBColor
@@ -15,12 +16,20 @@ def delete_existing_presentation(presentation_path):
             os.remove(presentation_path)
             print(f"기존의 '{presentation_path}' 파일을 삭제하였습니다.")
         except PermissionError:
-            print(f"'{presentation_path}' 파일이 사용 중이어서 삭제할 수 없습니다. 파일을 닫고 다시 시도하세요.")
-            return False
+            # Windows에서 파일 잠금 처리
+            if sys.platform.startswith('win'):
+                print(f"'{presentation_path}' 파일이 사용 중입니다. 대체 파일명을 사용합니다.")
+                # 대체 파일명 생성
+                base_name, ext = os.path.splitext(presentation_path)
+                new_path = f"{base_name}_new{ext}"
+                return new_path  # 대체 파일명 반환
+            else:
+                print(f"'{presentation_path}' 파일이 사용 중이어서 삭제할 수 없습니다. 파일을 닫고 다시 시도하세요.")
+                return False
         except Exception as e:
             print(f"파일 삭제 중 오류 발생: {e}")
             return False
-    return True
+    return True  # 기존 파일이 없거나 삭제 성공
 
 def set_slide_background_black(slide):
     """슬라이드의 배경을 검은색으로 설정합니다."""

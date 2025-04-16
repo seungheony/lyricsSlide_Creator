@@ -24,3 +24,7 @@ build/
 # 실행 시 생성되는 임시 파일
 converted_images/
 merged_presentation.pptx
+
+# ppt 파일
+*.pptx
+*.ppt
