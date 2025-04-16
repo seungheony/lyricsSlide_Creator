@@ -1,0 +1,26 @@
+# Python 캐시 파일
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 가상 환경
+.venv/
+venv/
+ENV/
+.env
+
+# IDE 관련 파일
+.idea/
+.vscode/
+*.swp
+*.swo
+.venv_info.json
+
+# 빌드 및 배포 관련 파일
+dist/
+build/
+*.egg-info/
+
+# 실행 시 생성되는 임시 파일
+converted_images/
+merged_presentation.pptx
