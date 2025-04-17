@@ -1,9 +1,27 @@
 """
+가사 슬라이드 메인 모듈
+"""
+
+import os
+from typing import List, Dict
+
+# 상대 경로 임포트 대신 절대 경로 임포트 사용
+try:
+    # 패키지로 설치된 경우
+    from lyricsslide_creator.lyrics_scraper import LyricsScraper
+    from lyricsslide_creator.lyrics_formatter import LyricsFormatter
+    from lyricsslide_creator.ppt_creator import LyricsPPTCreator
+except ImportError:
+    # 직접 실행하는 경우
+    from lyrics_scraper import LyricsScraper
+    from lyrics_formatter import LyricsFormatter
+    from ppt_creator import LyricsPPTCreator
+
+"""
 PPT 파일을 변환하여 가사 슬라이드에 최적화된 프레젠테이션을 생성하는 도구
 """
 
 import sys
-import os
 import traceback
 import argparse
 import subprocess
@@ -89,93 +107,82 @@ def get_args():
     return parser.parse_args()
 
 def run_lyrics_ppt_creator():
-    """가사 PPT 제작 기능 실행"""
+    """가사 PPT 생성 기능 실행"""
     print("\n=== 가사 PPT 제작 ===")
     
-    # 멜론 스크래퍼 초기화
-    try:
-        from lyricsslide_creator.lyrics_scraper import MelonScraper
-        from lyricsslide_creator.lyrics_formatter import LyricsFormatter
-        from lyricsslide_creator.ppt_creator import LyricsPPTCreator
-    except ImportError as e:
-        print(f"필요한 모듈을 임포트할 수 없습니다: {e}")
-        return
-    
-    scraper = MelonScraper()
-    
-    # 노래 제목 입력 (여러 개 가능)
+    # 노래 검색
     print("\n노래 제목을 입력하세요 (여러 곡을 검색하려면 쉼표로 구분):")
-    song_input = input("> ")
+    search_input = input("> ").strip()
     
-    song_titles = [title.strip() for title in song_input.split(",")]
-    
-    if not song_titles:
-        print("검색할 노래 제목이 없습니다.")
+    if not search_input:
+        print("검색어를 입력해주세요.")
         return
     
-    # 각 노래 제목 검색
+    song_titles = [title.strip() for title in search_input.split(',')]
+    
+    # 검색된 노래 목록을 저장할 리스트
+    selected_songs = []
+    
+    # 모든 제목에 대해 검색 수행
     for song_title in song_titles:
-        print(f"\n'{song_title}' 검색 중...")
-        search_results = scraper.search_songs(song_title)
-        
-        if not search_results:
-            print(f"'{song_title}'에 대한 검색 결과가 없습니다.")
-            continue
-        
-        # 검색 결과 표시
-        print(f"\n'{song_title}'에 대한 검색 결과 ({len(search_results)}개):")
-        for i, song in enumerate(search_results):
-            print(f"{i+1}. {song['title']} - {song['artist']} [{song['album']}]")
-            print(f"   {song['preview']}")
-        
-        # 노래 선택
-        print("\n사용할 노래 번호를 선택하세요 (0: 건너뛰기):")
         try:
-            choice = int(input("> ")) - 1
+            print(f"\n'{song_title}' 검색 중...")
             
-            if choice < 0 or choice >= len(search_results):
-                print("선택을 건너뜁니다.")
+            scraper = LyricsScraper()
+            search_results = scraper.search_songs(song_title)
+            
+            if not search_results:
+                print(f"'{song_title}'에 대한 검색 결과가 없습니다.")
                 continue
             
-            selected_song = search_results[choice]
+            print(f"\n'{song_title}'에 대한 검색 결과 ({len(search_results)}개):")
+            for i, result in enumerate(search_results, 1):
+                preview = result.get('preview', '가사 없음')
+                if len(preview) > 50:
+                    preview = preview[:50] + "..."
+                    
+                print(f"{i}. {result['title']} - {result['artist']} [{result['album']}]")
+                print(f"   {preview}")
             
-            # 전체 가사 가져오기
+            # 사용자 선택
+            print("\n사용할 노래 번호를 선택하세요 (0: 건너뛰기):")
+            selection = int(input("> ").strip())
+            
+            if selection == 0:
+                print(f"'{song_title}' 건너뛰기...")
+                continue
+            
+            if selection < 1 or selection > len(search_results):
+                print("올바른 번호를 입력해주세요.")
+                continue
+            
+            selected_song = search_results[selection-1]
+            
+            # 가사 가져오기
             print(f"\n'{selected_song['title']}' 가사 가져오는 중...")
-            song_info, full_lyrics = scraper.get_full_lyrics(selected_song['id'])
+            song_info = scraper.get_song_details(selected_song['id'])
             
-            # 가사 확인
             print("\n=== 노래 정보 ===")
             print(f"제목: {song_info['title']}")
             print(f"아티스트: {song_info['artist']}")
             print(f"앨범: {song_info['album']}")
-            
+
             print("\n=== 가사 미리보기 ===")
-            preview_lines = full_lyrics.split('\n')[:5]
-            print('\n'.join(preview_lines))
-            print("...")
+            full_lyrics = song_info['lyrics']
+            if len(full_lyrics) > 200:
+                print(f"{full_lyrics[:200]}...")
+            else:
+                print(full_lyrics)
+
+            print(f"\n이 노래의 가사로 PPT를 만드시겠습니까? (확인: 엔터, 이전으로: b):")
+            user_choice = input("> ").strip().lower()
+            if user_choice == 'b':
+                print(f"'{selected_song['title']}' 건너뛰기, 노래 선택 화면으로 돌아갑니다...")
+                continue  # 노래 검색 결과 선택 단계로 돌아가기
             
-            # 계속 진행 여부 확인
-            print("\n이 노래의 가사로 PPT를 만드시겠습니까? (y/n):")
-            confirm = input("> ").strip().lower()
-            
-            if confirm != 'y':
-                print("선택을 취소했습니다.")
-                continue
-            
-            # 가사 페이지 분할
-            print("\n가사를 페이지로 분할 중...")
-            formatter = LyricsFormatter()
-            lyrics_pages = formatter.split_lyrics_into_pages(full_lyrics)
-            
-            print(f"총 {len(lyrics_pages)}개의 페이지로 분할되었습니다.")
-            
-            # PPT 생성
-            print("\nPPT 생성 중...")
-            output_file = f"{song_info['title']}_가사.pptx"
-            creator = LyricsPPTCreator(output_file)
-            result_path = creator.create_presentation(song_info, lyrics_pages)
-            
-            print(f"\nPPT 생성 완료: {result_path}")
+            # 가사와 함께 선택한 노래 저장
+            song_info['formatted_lyrics'] = None  # 가사 페이지 분할 정보는 나중에 처리
+            selected_songs.append(song_info)
             
         except ValueError:
             print("잘못된 입력입니다. 숫자를 입력해주세요.")
@@ -183,6 +190,53 @@ def run_lyrics_ppt_creator():
         except Exception as e:
             print(f"처리 중 오류 발생: {e}")
             continue
+    
+    # 선택한 노래가 없는 경우
+    if not selected_songs:
+        print("선택한 노래가 없습니다.")
+        return
+    
+    # 하나의 PPT 객체 생성
+    print("\n여러 노래 가사를 하나의 PPT 파일로 만듭니다...")
+    output_file = "가사모음.pptx"
+    creator = LyricsPPTCreator(output_file)
+    
+    # 각 노래에 대해 가사 분할 및 PPT에 추가
+    for song_info in selected_songs:
+        print(f"\n'{song_info['title']}' 가사 처리 중...")
+        
+        # 가사 페이지 분할
+        print("\n가사를 페이지로 분할합니다.")
+        print("분할 방식을 선택하세요:")
+        print("1. 자동 분할 (2줄씩)")
+        print("2. 자동 분할 후 특정 페이지 선택")
+        print("3. 수동 분할 (직접 줄 번호 지정)")
+
+        split_mode = input("> ").strip()
+
+        formatter = LyricsFormatter()
+        if split_mode == "3":
+            # 완전 수동 분할
+            lyrics_pages = formatter.split_lyrics_with_user_input(song_info['lyrics'])
+        elif split_mode == "2":
+            # 자동 분할 후 특정 페이지 선택
+            lyrics_pages = formatter.split_lyrics_with_interactive_selection(song_info['lyrics'])
+        else:
+            # 자동 분할 (2줄씩)
+            print("\n자동으로 페이지를 분할합니다 (2줄씩)...")
+            formatter = LyricsFormatter(max_lines_per_slide=2)
+            lyrics_pages = formatter.split_lyrics_into_pages(song_info['lyrics'])
+
+        print(f"\n총 {len(lyrics_pages)}개의 페이지로 분할되었습니다.")
+        
+        # 현재 노래를 PPT에 추가
+        creator.add_song_to_presentation(song_info, lyrics_pages)
+        print(f"'{song_info['title']}' 가사가 PPT에 추가되었습니다.")
+    
+    # 최종 PPT 저장
+    result_path = creator.save_presentation()
+    print(f"\nPPT 생성 완료: {result_path}")
+    print(f"총 {len(selected_songs)}개 노래의 가사가 포함되었습니다.")
 
 def run_ppt_converter(args):
     """기존 PPT 변환 기능 실행"""

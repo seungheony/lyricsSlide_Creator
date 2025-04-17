@@ -9,8 +9,10 @@ import time
 import sys
 from typing import List, Dict, Tuple, Optional
 
-class MelonScraper:
-    """멜론 사이트에서 가사 정보를 가져오는 클래스"""
+class LyricsScraper:
+    """
+    가사를 검색하고 가져오는 클래스
+    """
     
     def __init__(self):
         self.search_url = "https://www.melon.com/search/song/index.htm"
@@ -28,7 +30,7 @@ class MelonScraper:
             query: 검색할 노래 제목
             
         Returns:
-            검색 결과 목록 (제목, 아티스트, 앨범, 가사 첫줄, 노래 ID 포함)
+            검색 결과 목록 (최대 10개, 제목, 아티스트, 앨범, 가사 첫줄, 노래 ID 포함)
         """
         params = {
             "q": query,
@@ -49,7 +51,8 @@ class MelonScraper:
             # 검색 결과 목록 찾기
             song_list = soup.select('#frm_defaultList > div > table > tbody > tr')
             
-            for song in song_list:
+            # 상위 10개 결과만 처리
+            for song in song_list[:10]:
                 try:
                     # 노래 ID 추출
                     song_id = song.select_one('td:nth-child(1) input')['value']
@@ -182,3 +185,22 @@ class MelonScraper:
         except requests.RequestException as e:
             print(f"전체 가사 요청 중 오류 발생: {e}")
             return {}, "가사를 가져오는 중 오류가 발생했습니다."
+    
+    def get_song_details(self, song_id: str) -> Dict:
+        """
+        노래 ID로 노래 정보와 전체 가사를 가져와서 하나의 딕셔너리로 반환합니다.
+        
+        Args:
+            song_id: 노래 ID
+            
+        Returns:
+            노래 정보와 가사가 포함된 딕셔너리
+        """
+        # 기존의 get_full_lyrics 메서드 활용
+        song_info, lyrics_text = self.get_full_lyrics(song_id)
+        
+        # 결과를 하나의 딕셔너리로 합침
+        result = song_info.copy()  # 기존 노래 정보 복사
+        result['lyrics'] = lyrics_text  # 가사 추가
+        
+        return result
