@@ -19,9 +19,12 @@ except (ImportError, ValueError):
 
 def convert_ppt_to_images(ppt_file, output_dir):
     """PPT 파일을 이미지로 변환합니다."""
-    # PPT 파일 이름
+    # PPT 파일 이름 (한글 처리를 위해 수정)
     ppt_name = os.path.splitext(os.path.basename(ppt_file))[0]
-
+    
+    # 안전한 임시 파일명 생성 (한글 제거)
+    safe_name = f"slide_{abs(hash(ppt_name)) % 10000}"  # 해시값으로 고유 ID 생성
+    
     try:
         # 1. .ppt 파일을 .pptx로 변환 (필요한 경우)
         if ppt_file.lower().endswith('.ppt'):
@@ -35,9 +38,9 @@ def convert_ppt_to_images(ppt_file, output_dir):
             modified_pptx_file = tmp_pptx.name
 
         set_slide_background_to_white(pptx_file, modified_pptx_file)
-
-        # 3. 슬라이드를 PDF로 변환
-        pdf_file = os.path.join(tempfile.gettempdir(), f"{ppt_name}_slides.pdf")
+        
+        # 3. 슬라이드를 PDF로 변환 (안전한 파일명 사용)
+        pdf_file = os.path.join(tempfile.gettempdir(), f"{safe_name}_slides.pdf")
         
         libreoffice_path = get_libreoffice_path()
         if libreoffice_path is None:
@@ -53,7 +56,17 @@ def convert_ppt_to_images(ppt_file, output_dir):
         ]
         
         # 사용자 프롬프트 없이 실행
-        subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        result = subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        
+        # PDF 파일명 확인 (LibreOffice에서 생성한 실제 파일명)
+        created_pdf = os.path.join(os.path.dirname(pdf_file), 
+                                  os.path.splitext(os.path.basename(modified_pptx_file))[0] + ".pdf")
+        
+        if os.path.exists(created_pdf):
+            pdf_file = created_pdf
+        else:
+            print(f"생성된 PDF 파일을 찾을 수 없습니다: {created_pdf}")
+            return []
 
         # 4. PDF를 이미지로 변환
         try:
@@ -67,12 +80,12 @@ def convert_ppt_to_images(ppt_file, output_dir):
             
             # 각 이미지 저장
             for i, image in enumerate(images):
-                # 흑백 반전
-                inverted_image = invert_image_colors(image)
+                # 이미지 파일 저장 (원래 파일명 사용하되 한글 오류 방지)
+                image_path = os.path.join(output_dir, f"{safe_name}_slide_{i+1}.png")
+                image.save(image_path, "PNG")
                 
-                # 이미지 파일 저장
-                image_path = os.path.join(output_dir, f"{ppt_name}_slide_{i+1}.png")
-                inverted_image.save(image_path, "PNG")
+                # 흑백 반전
+                invert_image_colors(image_path)
                 image_paths.append(image_path)
                 
             return image_paths
@@ -87,7 +100,10 @@ def convert_ppt_to_images(ppt_file, output_dir):
         
     finally:
         # 임시 파일 정리
-        cleanup_temp_files(pdf_file, modified_pptx_file, ppt_file, pptx_file)
+        try:
+            cleanup_temp_files(pdf_file, modified_pptx_file, ppt_file, pptx_file)
+        except Exception as e:
+            print(f"임시 파일 정리 중 오류: {e}")
 
 def cleanup_temp_files(pdf_file, modified_pptx_file, ppt_file, pptx_file):
     """임시 파일들을 안전하게 삭제합니다."""

@@ -8,6 +8,7 @@ from pptx import Presentation
 from pptx.util import Inches
 from pptx.dml.color import RGBColor
 from pptx.enum.shapes import MSO_SHAPE
+from io import BytesIO
 
 def delete_existing_presentation(presentation_path):
     """기존 프레젠테이션 파일이 있다면 삭제합니다."""
@@ -151,3 +152,188 @@ def create_presentation(all_image_paths, output_pptx):
         return False
         
     return True
+
+def merge_presentations(presentation_paths, output_path=None):
+    """여러 프레젠테이션을 하나로 병합"""
+    if not presentation_paths:
+        print("병합할 프레젠테이션이 없습니다.")
+        return None
+        
+    if not output_path:
+        output_path = "merged_presentation.pptx"
+    
+    # 첫 번째 프레젠테이션으로 새 객체 생성
+    try:
+        print("새 프레젠테이션 객체 생성 중...")
+        
+        # 단순히 병합 대신 첫 번째 파일을 복사하여 시작
+        first_ppt = presentation_paths[0]
+        shutil.copy(first_ppt, output_path)
+        
+        if len(presentation_paths) == 1:
+            print(f"변환된 파일이 하나뿐이므로 복사만 수행: {output_path}")
+            return output_path
+            
+        # 첫 번째 파일을 제외한 나머지 파일들을 추가
+        merged_prs = Presentation(output_path)
+        total_slides = len(merged_prs.slides)
+        
+        print(f"첫 번째 프레젠테이션에서 {total_slides}개 슬라이드 확인")
+        
+        # 두 번째 프레젠테이션부터 슬라이드 추가
+        for ppt_path in presentation_paths[1:]:
+            if not os.path.exists(ppt_path):
+                print(f"파일을 찾을 수 없습니다: {ppt_path}")
+                continue
+                
+            try:
+                print(f"'{os.path.basename(ppt_path)}' 병합 중...")
+                source_prs = Presentation(ppt_path)
+                
+                # 슬라이드 개수 로깅
+                slide_count = len(source_prs.slides)
+                print(f"소스 프레젠테이션에서 {slide_count}개 슬라이드 발견")
+                
+                # 전체 슬라이드 복사: python-pptx에서는 슬라이드 직접 복사가 어려움
+                # 대안: 슬라이드를 XML로 추출하여 새 프레젠테이션에 삽입
+                for slide in source_prs.slides:
+                    # 이 소스 프레젠테이션의 마스터 슬라이드와 레이아웃 정보 가져오기
+                    layout = slide.slide_layout
+                    
+                    # 새 슬라이드 추가
+                    new_slide = merged_prs.slides.add_slide(merged_prs.slide_layouts[6])  # 빈 레이아웃
+                    
+                    # 배경 설정
+                    background = new_slide.background
+                    fill = background.fill
+                    fill.solid()
+                    fill.fore_color.rgb = RGBColor(0, 0, 0)  # 검은색
+                    
+                    # 슬라이드 요소 복사 (이미지, 텍스트 등)
+                    for shape in slide.shapes:
+                        # 이미지 처리
+                        if shape.shape_type == MSO_SHAPE.PICTURE:
+                            try:
+                                image = shape.image
+                                image_bytes = image.blob
+                                left = shape.left
+                                top = shape.top
+                                width = shape.width
+                                height = shape.height
+                                
+                                # 새 슬라이드에 이미지 추가
+                                new_shape = new_slide.shapes.add_picture(
+                                    BytesIO(image_bytes), left, top, width, height
+                                )
+                                print(f"이미지 추가됨: {width}x{height}")
+                            except Exception as e:
+                                print(f"이미지 추가 실패: {e}")
+                        
+                        # 도형 처리
+                        elif shape.shape_type == MSO_SHAPE.AUTO_SHAPE:
+                            try:
+                                left = shape.left
+                                top = shape.top
+                                width = shape.width
+                                height = shape.height
+                                
+                                new_shape = new_slide.shapes.add_shape(
+                                    shape.auto_shape_type, left, top, width, height
+                                )
+                                
+                                # 도형 스타일 복사
+                                if hasattr(shape, 'fill'):
+                                    new_shape.fill.solid()
+                                    if hasattr(shape.fill, 'fore_color') and shape.fill.fore_color:
+                                        new_shape.fill.fore_color.rgb = shape.fill.fore_color.rgb
+                                
+                                # 텍스트 복사
+                                if hasattr(shape, 'text_frame') and shape.text:
+                                    new_shape.text = shape.text
+                                    print(f"텍스트 도형 추가됨: {shape.text[:20]}...")
+                            except Exception as e:
+                                print(f"도형 추가 실패: {e}")
+                            
+                        # 플레이스홀더 및 기타 텍스트 도형 처리
+                        elif hasattr(shape, 'text_frame'):
+                            try:
+                                if shape.text.strip():
+                                    left = shape.left
+                                    top = shape.top
+                                    width = shape.width
+                                    height = shape.height
+                                    
+                                    text_box = new_slide.shapes.add_textbox(
+                                        left, top, width, height
+                                    )
+                                    text_box.text = shape.text
+                                    print(f"텍스트 추가됨: {shape.text[:20]}...")
+                            except Exception as e:
+                                print(f"텍스트 추가 실패: {e}")
+                
+                total_slides += slide_count
+                print(f"'{os.path.basename(ppt_path)}'에서 {slide_count}개 슬라이드 병합됨")
+                
+            except Exception as e:
+                print(f"'{ppt_path}' 병합 중 오류 발생: {e}")
+        
+        # 저장
+        merged_prs.save(output_path)
+        print(f"\n병합된 프레젠테이션 저장 완료: {output_path}")
+        print(f"총 {total_slides}개 슬라이드가 병합되었습니다.")
+        
+        return output_path
+        
+    except Exception as e:
+        print(f"프레젠테이션 병합 중 오류 발생: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+def convert_presentation_to_lyrics_format(input_ppt, output_ppt=None):
+    """PPT 파일을 가사 형식으로 변환합니다."""
+    import tempfile
+    from lyricsslide_creator.ppt_converter import convert_ppt_to_images
+    
+    if not output_ppt:
+        base_name, ext = os.path.splitext(input_ppt)
+        # 항상 .pptx 확장자로 저장
+        output_ppt = f"{base_name}_lyrics.pptx"
+    
+    # 출력 파일이 .pptx로 끝나는지 확인
+    if not output_ppt.lower().endswith('.pptx'):
+        output_ppt = f"{os.path.splitext(output_ppt)[0]}.pptx"
+        print(f"참고: 출력 파일은 항상 .pptx 형식으로 저장됩니다. 변경된 경로: {output_ppt}")
+    
+    # 이미지 추출용 임시 폴더 생성
+    temp_dir = tempfile.mkdtemp()
+    try:
+        print(f"'{input_ppt}'에서 이미지를 추출하는 중...")
+        
+        # PPT를 이미지로 변환
+        image_paths = convert_ppt_to_images(input_ppt, temp_dir)
+        
+        if not image_paths:
+            print("이미지 추출에 실패했습니다.")
+            return None
+        
+        # 추출된 이미지를 새 프레젠테이션에 추가
+        print("추출된 이미지로 프레젠테이션 생성 중...")
+        all_image_paths = [(input_ppt, image_paths)]
+        success = create_presentation(all_image_paths, output_ppt)
+        
+        if success:
+            print(f"변환 완료: {output_ppt}")
+            return output_ppt
+        else:
+            print("프레젠테이션 생성 중 오류가 발생했습니다.")
+            return None
+    
+    except Exception as e:
+        print(f"프레젠테이션 변환 중 오류 발생: {e}")
+        return None
+    
+    finally:
+        # 임시 파일 정리
+        import shutil
+        shutil.rmtree(temp_dir, ignore_errors=True)

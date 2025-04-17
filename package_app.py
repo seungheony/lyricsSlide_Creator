@@ -110,6 +110,36 @@ def create_resources_folder():
     
     return True
 
+def create_empty_folders():
+    """패키지에 포함될 빈 폴더를 생성합니다."""
+    print_step("패키지용 폴더 구조 생성")
+    
+    # 폴더 경로 설정
+    input_dir = os.path.join(PROJECT_ROOT, "input_ppts")
+    output_dir = os.path.join(PROJECT_ROOT, "output_ppts")
+    
+    # 폴더 생성
+    created = False
+    if not os.path.exists(input_dir):
+        os.makedirs(input_dir)
+        print(f"변환할 PPT 파일을 넣을 폴더를 생성했습니다: {input_dir}")
+        created = True
+        
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+        print(f"변환된 PPT 파일이 저장될 폴더를 생성했습니다: {output_dir}")
+        created = True
+    
+    # README 파일 추가
+    if created:
+        with open(os.path.join(input_dir, "README.txt"), "w", encoding="utf-8") as f:
+            f.write("이 폴더에 변환할 PPT 파일을 넣어주세요.\n")
+        
+        with open(os.path.join(output_dir, "README.txt"), "w", encoding="utf-8") as f:
+            f.write("변환된 PPT 파일이 이 폴더에 저장됩니다.\n")
+    
+    return True
+
 def create_spec_file():
     """PyInstaller 스펙 파일 생성"""
     print_step("PyInstaller 스펙 파일 생성")
@@ -138,6 +168,8 @@ else:
 add_files = [
     (os.path.join(project_root, 'requirements.txt'), '.'),
     (os.path.join(project_root, 'README.md'), '.'),
+    (os.path.join(project_root, 'input_ppts'), 'input_ppts'),  # 추가: 입력 폴더
+    (os.path.join(project_root, 'output_ppts'), 'output_ppts'),  # 추가: 출력 폴더
 ]
 
 # 실행할 메인 스크립트
@@ -436,18 +468,22 @@ def main():
     if not create_resources_folder():
         sys.exit(1)
     
-    # 2. PyInstaller 스펙 파일 생성
+    # 2. 패키지용 빈 폴더 생성
+    if not create_empty_folders():
+        sys.exit(1)
+    
+    # 3. PyInstaller 스펙 파일 생성
     if not create_spec_file():
         sys.exit(1)
     
-    # 3. 가상 환경 설정
+    # 4. 가상 환경 설정
     result = setup_virtual_environment()
     if not result:
         sys.exit(1)
     
     python_path, _ = result
     
-    # 4. 플랫폼별 빌드
+    # 5. 플랫폼별 빌드
     if platform.system() == "Darwin":  # macOS
         if not build_for_macos(python_path):
             sys.exit(1)
