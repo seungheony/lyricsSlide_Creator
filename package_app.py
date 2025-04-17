@@ -18,6 +18,9 @@ YELLOW = "\033[93m" if sys.platform != "win32" else ""
 RED = "\033[91m" if sys.platform != "win32" else ""
 RESET = "\033[0m" if sys.platform != "win32" else ""
 
+# 프로젝트 루트 경로 설정 (스크립트 위치 기준)
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+
 def print_step(message):
     """단계 메시지 출력"""
     print(f"\n{GREEN}=== {message} ==={RESET}")
@@ -30,16 +33,20 @@ def print_error(message):
     """오류 메시지 출력"""
     print(f"{RED}오류: {message}{RESET}")
 
-def run_command(command, shell=False):
+def run_command(command, shell=False, cwd=None):
     """명령어 실행 및 결과 반환"""
     try:
+        if cwd is None:
+            cwd = PROJECT_ROOT
+            
         result = subprocess.run(
             command, 
             shell=shell, 
             check=True, 
             stdout=subprocess.PIPE, 
             stderr=subprocess.PIPE,
-            text=True
+            text=True,
+            cwd=cwd
         )
         return True, result.stdout
     except subprocess.CalledProcessError as e:
@@ -52,18 +59,36 @@ def create_resources_folder():
     print_step("리소스 폴더 설정")
     
     # 리소스 폴더 생성
-    resources_dir = os.path.join(os.getcwd(), "resources")
+    resources_dir = os.path.join(PROJECT_ROOT, "resources")
     os.makedirs(resources_dir, exist_ok=True)
     
     # 기본 아이콘 파일 생성 (아이콘이 없는 경우)
     icon_path_win = os.path.join(resources_dir, "icon.ico")
     icon_path_mac = os.path.join(resources_dir, "icon.icns")
     
+    # 아이콘 생성 전 필요한 Pillow 패키지 설치 시도
+    try:
+        import importlib
+        try:
+            importlib.import_module('PIL')
+            print("Pillow 패키지가 이미 설치되어 있습니다.")
+        except ImportError:
+            print("Pillow 패키지 설치 중...")
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "pillow"])
+    except Exception as e:
+        print_warning(f"Pillow 설치 실패: {e}. 아이콘 생성을 건너뜁니다.")
+        return True
+        
+    # 이제 PIL 임포트 시도
+    try:
+        from PIL import Image, ImageDraw
+    except ImportError:
+        print_warning("Pillow 패키지를 임포트할 수 없습니다. 기본 아이콘 생성을 건너뜁니다.")
+        return True
+    
     if not os.path.exists(icon_path_win) and platform.system() == "Windows":
         print("Windows용 기본 아이콘 생성 중...")
         try:
-            # 간단한 파이썬 스크립트로 기본 아이콘 생성
-            from PIL import Image, ImageDraw
             img = Image.new('RGBA', (256, 256), color=(73, 109, 137, 255))
             d = ImageDraw.Draw(img)
             d.text((20, 128), "LyricsSlide", fill=(255, 255, 255))
@@ -75,14 +100,10 @@ def create_resources_folder():
     if not os.path.exists(icon_path_mac) and platform.system() == "Darwin":
         print("macOS용 기본 아이콘 생성 중...")
         try:
-            # 간단한 파이썬 스크립트로 기본 아이콘 생성
-            from PIL import Image, ImageDraw
             img = Image.new('RGBA', (1024, 1024), color=(73, 109, 137, 255))
             d = ImageDraw.Draw(img)
             d.text((100, 512), "LyricsSlide", fill=(255, 255, 255))
             img.save(os.path.join(resources_dir, "icon.png"))
-            
-            # macOS에서는 .icns 파일 생성이 복잡하므로 .png만 생성
             print(f"기본 아이콘 생성 완료: {os.path.join(resources_dir, 'icon.png')}")
         except Exception as e:
             print_warning(f"아이콘 생성 실패. 계속 진행합니다: {e}")
@@ -115,8 +136,8 @@ else:
 
 # 파일 목록 설정 (패키지에 포함될 추가 파일)
 add_files = [
-    ('requirements.txt', '.'),
-    ('README.md', '.'),
+    (os.path.join(project_root, 'requirements.txt'), '.'),
+    (os.path.join(project_root, 'README.md'), '.'),
 ]
 
 # 실행할 메인 스크립트
@@ -190,7 +211,7 @@ if sys.platform == 'darwin':
     )
 """
     
-    spec_file_path = os.path.join(os.getcwd(), "lyrics_slide.spec")
+    spec_file_path = os.path.join(PROJECT_ROOT, "lyrics_slide.spec")
     with open(spec_file_path, "w", encoding="utf-8") as f:
         f.write(spec_content)
     
@@ -201,12 +222,15 @@ def setup_virtual_environment():
     """가상 환경 설정 및 필요한 패키지 설치"""
     print_step("가상 환경 설정")
     
-    venv_dir = os.path.join(os.getcwd(), "build_env")
+    venv_dir = os.path.join(PROJECT_ROOT, "build_env")
     
     # 기존 가상 환경 제거 (있는 경우)
     if os.path.exists(venv_dir):
         print("기존 가상 환경 제거 중...")
-        shutil.rmtree(venv_dir, ignore_errors=True)
+        try:
+            shutil.rmtree(venv_dir, ignore_errors=True)
+        except Exception as e:
+            print_warning(f"가상 환경 제거 중 오류: {e}. 계속 진행합니다.")
     
     # 가상 환경 생성
     print("새 가상 환경 생성 중...")
@@ -231,15 +255,30 @@ def setup_virtual_environment():
     
     # 필요한 패키지 설치
     print("필요한 패키지 설치 중...")
+    
+    # PyInstaller 설치
     success, _ = run_command([pip_path, "install", "pyinstaller"])
     if not success:
         print_error("PyInstaller 설치 실패")
         return False
     
-    success, _ = run_command([pip_path, "install", "-r", "requirements.txt"])
-    if not success:
-        print_error("종속성 패키지 설치 실패")
-        return False
+    # requirements.txt 절대 경로로 지정
+    req_path = os.path.join(PROJECT_ROOT, "requirements.txt")
+    if not os.path.exists(req_path):
+        print_error(f"requirements.txt 파일을 찾을 수 없습니다: {req_path}")
+        print("기본 종속성만 설치합니다.")
+        
+        # 기본 종속성 직접 설치
+        for pkg in ["python-pptx", "Pillow", "pdf2image", "requests", "beautifulsoup4"]:
+            print(f"{pkg} 설치 중...")
+            success, _ = run_command([pip_path, "install", pkg])
+            if not success:
+                print_warning(f"{pkg} 설치 실패. 계속 진행합니다.")
+    else:
+        success, _ = run_command([pip_path, "install", "-r", req_path])
+        if not success:
+            print_error("종속성 패키지 설치 실패")
+            return False
     
     # PIL 설치 (아이콘 생성용)
     success, _ = run_command([pip_path, "install", "pillow"])
@@ -253,34 +292,38 @@ def build_for_macos(python_path):
     print_step("macOS용 애플리케이션 빌드")
     
     # 기존 빌드 디렉토리 정리
-    if os.path.exists("dist"):
-        shutil.rmtree("dist", ignore_errors=True)
-    if os.path.exists("build"):
-        shutil.rmtree("build", ignore_errors=True)
+    build_dir = os.path.join(PROJECT_ROOT, "build")
+    dist_dir = os.path.join(PROJECT_ROOT, "dist")
+    
+    if os.path.exists(dist_dir):
+        shutil.rmtree(dist_dir, ignore_errors=True)
+    if os.path.exists(build_dir):
+        shutil.rmtree(build_dir, ignore_errors=True)
     
     # PyInstaller 실행
     print("PyInstaller로 빌드 중...")
-    success, _ = run_command([python_path, "-m", "PyInstaller", "lyrics_slide.spec"])
+    spec_path = os.path.join(PROJECT_ROOT, "lyrics_slide.spec")
+    success, _ = run_command([python_path, "-m", "PyInstaller", spec_path])
     if not success:
         print_error("PyInstaller 빌드 실패")
         return False
     
     # DMG 생성
     print("DMG 파일 생성 중...")
-    dmg_dir = os.path.join(os.getcwd(), "dist", "dmg")
+    dmg_dir = os.path.join(PROJECT_ROOT, "dist", "dmg")
     os.makedirs(dmg_dir, exist_ok=True)
     
-    app_path = os.path.join(os.getcwd(), "dist", "lyrics_slide", "LyricsSlide.app")
+    app_path = os.path.join(PROJECT_ROOT, "dist", "lyrics_slide", "LyricsSlide.app")
     if os.path.exists(app_path):
         shutil.copytree(app_path, os.path.join(dmg_dir, "LyricsSlide.app"), dirs_exist_ok=True)
     else:
         # 앱 번들이 생성되지 않은 경우 일반 폴더 복사
-        folder_path = os.path.join(os.getcwd(), "dist", "lyrics_slide")
+        folder_path = os.path.join(PROJECT_ROOT, "dist", "lyrics_slide")
         if os.path.exists(folder_path):
             shutil.copytree(folder_path, os.path.join(dmg_dir, "LyricsSlide"), dirs_exist_ok=True)
     
     # DMG 생성 명령 실행
-    dmg_path = os.path.join(os.getcwd(), "dist", "LyricsSlide_Creator.dmg")
+    dmg_path = os.path.join(PROJECT_ROOT, "dist", "LyricsSlide_Creator.dmg")
     success, _ = run_command([
         "hdiutil", "create", 
         "-volname", "LyricsSlide Creator", 
@@ -302,22 +345,24 @@ def build_for_windows(python_path):
     print_step("Windows용 애플리케이션 빌드")
     
     # 기존 빌드 디렉토리 정리
-    if os.path.exists("dist"):
-        if platform.system() == "Windows":
-            # Windows에서는 rmtree가 제대로 작동하지 않을 수 있어 명령어 사용
-            run_command("rmdir /s /q dist", shell=True)
-        else:
-            shutil.rmtree("dist", ignore_errors=True)
+    build_dir = os.path.join(PROJECT_ROOT, "build")
+    dist_dir = os.path.join(PROJECT_ROOT, "dist")
     
-    if os.path.exists("build"):
-        if platform.system() == "Windows":
-            run_command("rmdir /s /q build", shell=True)
-        else:
-            shutil.rmtree("build", ignore_errors=True)
+    if os.path.exists(dist_dir):
+        try:
+            shutil.rmtree(dist_dir, ignore_errors=True)
+        except Exception as e:
+            print_warning(f"dist 폴더 제거 중 오류: {e}. 계속 진행합니다.")
+    if os.path.exists(build_dir):
+        try:
+            shutil.rmtree(build_dir, ignore_errors=True)
+        except Exception as e:
+            print_warning(f"build 폴더 제거 중 오류: {e}. 계속 진행합니다.")
     
     # PyInstaller 실행
     print("PyInstaller로 빌드 중...")
-    success, _ = run_command([python_path, "-m", "PyInstaller", "lyrics_slide.spec"])
+    spec_path = os.path.join(PROJECT_ROOT, "lyrics_slide.spec")
+    success, _ = run_command([python_path, "-m", "PyInstaller", spec_path])
     if not success:
         print_error("PyInstaller 빌드 실패")
         return False
@@ -345,17 +390,24 @@ Section "Uninstall"
 SectionEnd
 """
     
-    with open("installer.nsi", "w") as f:
+    nsis_path = os.path.join(PROJECT_ROOT, "installer.nsi")
+    with open(nsis_path, "w") as f:
         f.write(nsis_script)
     
     # NSIS가 설치되어 있는지 확인
     if platform.system() == "Windows":
         print("NSIS 설치 여부 확인 중...")
-        makensis_exists, _ = run_command("where makensis", shell=True)
+        try:
+            # Windows에서 where 명령을 사용해 makensis 있는지 확인
+            result = subprocess.run("where makensis", shell=True, text=True,
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            makensis_exists = result.returncode == 0
+        except Exception:
+            makensis_exists = False
         
         if makensis_exists:
             print("NSIS로 설치 프로그램 생성 중...")
-            success, _ = run_command(["makensis", "installer.nsi"])
+            success, _ = run_command(["makensis", nsis_path])
             
             if success:
                 print("설치 프로그램 생성 완료: dist\\LyricsSlide_Creator_Setup.exe")
@@ -367,12 +419,18 @@ SectionEnd
     else:
         print_warning("Windows 환경이 아니므로 설치 프로그램은 생성하지 않습니다.")
     
-    print(f"실행 파일 생성 완료: dist/lyrics_slide")
+    # 실행 파일 생성 위치 안내
+    dist_path = os.path.join(PROJECT_ROOT, "dist", "lyrics_slide")
+    print(f"실행 파일 생성 완료: {dist_path}")
     return True
 
 def main():
     """메인 함수"""
     print(f"{GREEN}LyricsSlide Creator 패키징 자동화 시작{RESET}")
+    
+    # 작업 디렉토리를 프로젝트 루트로 변경
+    os.chdir(PROJECT_ROOT)
+    print(f"작업 디렉토리: {os.getcwd()}")
     
     # 1. 리소스 폴더 설정
     if not create_resources_folder():
@@ -402,6 +460,7 @@ def main():
     
     print(f"\n{GREEN}LyricsSlide Creator 패키징 완료!{RESET}")
     print(f"\n결과물은 dist 폴더에서 찾을 수 있습니다.")
+    print(f"위치: {os.path.join(PROJECT_ROOT, 'dist')}")
 
 if __name__ == "__main__":
     main()
