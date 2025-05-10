@@ -205,9 +205,10 @@ def process_lyrics(scraper, selected_song):
     
     return song_info
 
+# split_lyrics_pages 함수 수정 - 노래 제목 표시
 def split_lyrics_pages(song_info):
-    """가사 페이지 분할"""
-    print("\n가사를 페이지로 분할합니다.")
+    """노래의 가사를 페이지로 분할합니다."""
+    print(f"\n=== '{song_info['title']}' 가사 분할 ===")
     print("분할 방식을 선택하세요:")
     print("1. 자동 분할 (2줄씩)")
     print("2. 자동 분할 후 특정 페이지 선택")
@@ -224,13 +225,14 @@ def split_lyrics_pages(song_info):
         lyrics_pages = formatter.split_lyrics_with_interactive_selection(song_info['lyrics'])
     else:
         # 자동 분할 (2줄씩)
-        print("\n자동으로 페이지를 분할합니다 (2줄씩)...")
+        print(f"\n'{song_info['title']}' 가사를 자동으로 페이지를 분할합니다 (2줄씩)...")
         formatter = LyricsFormatter(max_lines_per_slide=2)
         lyrics_pages = formatter.split_lyrics_into_pages(song_info['lyrics'])
 
-    print(f"\n총 {len(lyrics_pages)}개의 페이지로 분할되었습니다.")
+    print(f"\n'{song_info['title']}' 가사가 총 {len(lyrics_pages)}개의 페이지로 분할되었습니다.")
     return lyrics_pages
 
+# run_lyrics_ppt_creator 함수 수정 - 노래별 폰트 크기 설정 및 구분 슬라이드 추가
 def run_lyrics_ppt_creator():
     """가사 PPT 생성 기능 실행"""
     print("\n=== 가사 PPT 제작 ===")
@@ -276,116 +278,165 @@ def run_lyrics_ppt_creator():
         print("선택한 노래가 없습니다.")
         return
     
-    # 출력 파일 경로 지정 (output_dir 폴더에 저장)
+    # 출력 파일 경로 지정
     import time
     timestamp = time.strftime("%Y%m%d_%H%M%S")
     output_file = os.path.join(output_dir, f"멜론검색_{timestamp}.pptx")
     
-    # 하나의 PPT 객체 생성
-    print(f"\n여러 노래 가사를 하나의 PPT 파일로 만듭니다...")
-    creator = LyricsPPTCreator(output_file)
+    # 가사 페이지와 노래 구분점 저장
+    all_lyrics_pages = []
+    song_breaks = []  # 노래가 바뀌는 인덱스 저장
+    font_sizes = []   # 노래별 폰트 크기 저장
     
-    # 각 노래에 대해 가사 분할 및 PPT에 추가
+    # 각 노래에 대해 가사 분할 및 폰트 크기 설정
     for song_info in selected_songs:
+        # 현재 페이지 수에 따른 구분점 추가
+        if all_lyrics_pages:  # 첫 번째 노래가 아닌 경우
+            song_breaks.append(len(all_lyrics_pages))
+        
+        # 사용자로부터 폰트 크기 입력받기
+        from lyricsslide_creator.template_ppt_creator import get_font_size_from_user
+        print(f"\n=== '{song_info['title']}' 폰트 크기 설정 ===")
+        font_size = get_font_size_from_user()
+        font_sizes.append(font_size)
+        
         # 가사 페이지 분할
         lyrics_pages = split_lyrics_pages(song_info)
-        
-        # 현재 노래를 PPT에 추가
-        creator.add_song_to_presentation(song_info, lyrics_pages)
-        print(f"'{song_info['title']}' 가사가 PPT에 추가되었습니다.")
+        all_lyrics_pages.extend(lyrics_pages)
+        print(f"'{song_info['title']}' 가사가 추가되었습니다.")
     
-    # 최종 PPT 저장
-    result_path = creator.save_presentation()
+    # 템플릿 기반 PPT 생성 (노래 구분점과 폰트 크기 목록 전달)
+    from lyricsslide_creator.template_ppt_creator import create_lyrics_slides_from_template
+    result_path = create_lyrics_slides_from_template(
+        output_file, 
+        all_lyrics_pages, 
+        song_breaks=song_breaks, 
+        font_size=font_sizes
+    )
+    
     print(f"\nPPT 생성 완료: {result_path}")
     print(f"총 {len(selected_songs)}개 노래의 가사가 포함되었습니다.")
     print(f"결과물은 다음 폴더에 저장되었습니다: {output_dir}")
 
 def run_ppt_convert():
-    """악보 포함 가사 PPT 변환 기능 실행"""
-    try:
-        # 패키지 내 모듈 임포트 - 절대 경로 사용
-        from lyricsslide_creator.pptx_creator import convert_presentation_to_lyrics_format, merge_presentations
-        from lyricsslide_creator.ppt_converter import convert_ppt_files
-        import shutil
-        
-        print("\n=== 악보 포함 가사 PPT 제작 ===")
-        
-        # 패키지 폴더 확인
-        _, input_dir, output_dir = ensure_package_folders()
-        
-        # 폴더 내 모든 PPT 파일 찾기
-        ppt_files = []
-        for file in os.listdir(input_dir):
-            if file.lower().endswith(('.ppt', '.pptx')):
-                ppt_files.append(os.path.join(input_dir, file))
-        
-        if not ppt_files:
-            print(f"\n'{input_dir}' 폴더에 PPT 파일이 없습니다.")
-            print("이 폴더에 변환할 PPT 파일들을 넣고 다시 시도해주세요.")
-            return
-            
-        print(f"\n'{input_dir}' 폴더에서 {len(ppt_files)}개의 PPT 파일을 찾았습니다.")
-        print("모든 파일을 변환하려면 엔터키를 누르세요. (취소: n):")
-        
-        if input("> ").strip().lower() == 'n':
-            print("변환이 취소되었습니다.")
-            return
-        
-        # 임시 디렉토리 생성 (변환된 개별 PPT 파일을 임시 저장)
-        import tempfile
-        temp_dir = tempfile.mkdtemp()
-        
-        try:
-            # 각 파일 변환 (임시 폴더에 저장)
-            converted_paths = []
-            
-            for path in ppt_files:
-                file_name = os.path.basename(path)
-                print(f"\n'{file_name}' 변환 중...")
-                
-                # 출력 파일 경로 설정 (임시 폴더에 저장)
-                base_name, ext = os.path.splitext(file_name)
-                temp_output_path = os.path.join(temp_dir, f"{base_name}_lyrics.pptx")
-                
-                result_path = convert_presentation_to_lyrics_format(path, temp_output_path)
-                if result_path:
-                    converted_paths.append(result_path)
-                    print(f"변환 완료")
-                else:
-                    print(f"'{file_name}' 변환 실패")
-            
-            if not converted_paths:
-                print("\n변환된 파일이 없습니다.")
-                return
-            
-            # 타임스탬프로 파일명 생성
-            timestamp = time.strftime("%Y%m%d_%H%M%S")
-            merged_path = os.path.join(output_dir, f"병합된_가사_{timestamp}.pptx")
-            
-            # 항상 자동으로 병합 진행
-            print(f"\n{len(converted_paths)}개의 파일을 하나의 PPT로 병합하는 중...")
-            result = merge_presentations(converted_paths, merged_path)
-            
-            if result:
-                print(f"\n모든 파일이 성공적으로 변환 및 병합되었습니다.")
-                print(f"결과 파일: {result}")
-            else:
-                print("\n병합 실패. 개별 변환된 파일들을 저장합니다.")
-                # 병합 실패시에만 개별 파일 저장
-                for temp_path in converted_paths:
-                    file_name = os.path.basename(temp_path)
-                    final_path = os.path.join(output_dir, file_name)
-                    shutil.copy2(temp_path, final_path)
-                print(f"변환된 개별 파일들이 {output_dir} 폴더에 저장되었습니다.")
-            
-        finally:
-            # 임시 디렉토리와 모든 임시 파일 삭제
-            shutil.rmtree(temp_dir, ignore_errors=True)
+    """악보 PPT를 가사 형식으로 변환하는 기능 실행"""
+    print("\n=== 악보 PPT 변환 ===")
     
+    # 패키지 폴더 확인 - 순서 수정
+    folders_created, input_dir, output_dir = ensure_package_folders()
+    
+    # PPT 파일 목록 확인
+    ppt_files = []
+    for file in os.listdir(input_dir):
+        if file.lower().endswith(('.pptx', '.ppt')):
+            ppt_files.append(file)
+    
+    if not ppt_files:
+        print(f"\n'{input_dir}' 폴더에 변환할 PPT 파일이 없습니다.")
+        print("PPT 파일을 input_ppts 폴더에 넣은 후 다시 시도해주세요.")
+        return
+    
+    print(f"\n다음 PPT 파일을 발견했습니다 (총 {len(ppt_files)}개):")
+    for i, file in enumerate(ppt_files, 1):
+        print(f"{i}. {file}")
+    
+    # 변환 확인 - 기본값을 y로 설정
+    print("\n이 파일들을 가사 형식으로 변환하시겠습니까? (y/n, 기본값: y)")
+    choice = input("> ").strip().lower()
+    
+    # 엔터 키 또는 'y'인 경우 진행
+    if choice and choice != 'y':
+        print("변환 취소")
+        return
+    
+    print("\n변환 중...")
+    
+    try:
+        # 임시 폴더 생성
+        temp_output_dir = os.path.join(output_dir, "temp_images")
+        os.makedirs(temp_output_dir, exist_ok=True)
+        
+        # 모든 PPT 파일 변환
+        from lyricsslide_creator.ppt_converter import convert_ppt_files
+        converted_files = convert_ppt_files(input_dir, temp_output_dir)
+        
+        # 변환 실패 시 종료
+        if not converted_files:
+            print("PPT 변환에 실패했습니다.")
+            # cleanup_temp_files 함수 수정 (매개변수 없이 호출)
+            import shutil
+            shutil.rmtree(temp_output_dir, ignore_errors=True)
+            return
+        
+        # 타임스탬프 생성
+        import time
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        
+        # 각 PPT 파일에 대해 개별 처리
+        output_pptx_files = []
+        
+        for converted in converted_files:
+            # 현재 PPT 파일의 출력 디렉토리
+            ppt_output_dir = converted['output_dir']
+            file_basename = converted['basename']
+            
+            # 이미지를 새 PPT로 변환
+            from lyricsslide_creator.pptx_creator import create_presentation
+            output_file = os.path.join(output_dir, f"{file_basename}_{timestamp}.pptx")
+            
+            try:
+                create_presentation(output_file, ppt_output_dir, invert_colors=True)
+                output_pptx_files.append(output_file)
+                print(f"생성 완료: {output_file}")
+            except Exception as e:
+                # invert_colors 매개변수 오류 발생 시 기본 호출
+                print(f"참고: {str(e)}")
+                print("기본 설정으로 생성합니다.")
+                create_presentation(output_file, ppt_output_dir)
+                output_pptx_files.append(output_file)
+                print(f"생성 완료: {output_file}")
+        
+        # 여러 PPT가 있을 경우 자동 병합 (질문 없이)
+        if len(output_pptx_files) > 1:
+            print("\n여러 개의 PPT 파일이 생성되었습니다. 자동으로 병합합니다...")
+            
+            from lyricsslide_creator.pptx_creator import merge_presentations
+            merged_file = os.path.join(output_dir, f"병합된_악보_{timestamp}.pptx")
+            
+            # 병합 수행
+            success = merge_presentations(output_pptx_files, merged_file)
+            
+            # 병합 성공 시 개별 PPT 파일 삭제
+            if success and os.path.exists(merged_file):
+                print(f"\n모든 PPT 파일이 병합되었습니다: {merged_file}")
+                print("개별 PPT 파일을 삭제합니다...")
+                
+                for ppt_file in output_pptx_files:
+                    try:
+                        if os.path.exists(ppt_file):
+                            os.remove(ppt_file)
+                            print(f"삭제됨: {os.path.basename(ppt_file)}")
+                    except Exception as e:
+                        print(f"파일 삭제 실패: {os.path.basename(ppt_file)} - {e}")
+        
+        # 임시 폴더 정리
+        import shutil
+        shutil.rmtree(temp_output_dir, ignore_errors=True)
+        
+        print("\n변환이 완료되었습니다.")
+        print(f"결과물은 다음 폴더에 저장되었습니다: {output_dir}")
+        
     except Exception as e:
-        print(f"PPT 변환 기능 실행 중 오류 발생: {e}")
         import traceback
+        print(f"변환 중 오류가 발생했습니다: {str(e)}")
         traceback.print_exc()
+        
+        # 임시 폴더 정리 시도
+        try:
+            import shutil
+            shutil.rmtree(temp_output_dir, ignore_errors=True)
+        except:
+            pass
 
 def main():
     """메인 실행 함수"""

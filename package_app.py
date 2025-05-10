@@ -168,8 +168,9 @@ else:
 add_files = [
     (os.path.join(project_root, 'requirements.txt'), '.'),
     (os.path.join(project_root, 'README.md'), '.'),
-    (os.path.join(project_root, 'input_ppts'), 'input_ppts'),  # 추가: 입력 폴더
-    (os.path.join(project_root, 'output_ppts'), 'output_ppts'),  # 추가: 출력 폴더
+    (os.path.join(project_root, 'template.pptx'), '.'),  # 템플릿 파일 추가
+    (os.path.join(project_root, 'input_ppts'), 'input_ppts'),
+    (os.path.join(project_root, 'output_ppts'), 'output_ppts'),
 ]
 
 # 실행할 메인 스크립트

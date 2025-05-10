@@ -7,6 +7,7 @@ from pptx import Presentation
 from pptx.util import Pt, Inches
 from pptx.enum.text import PP_ALIGN
 from pptx.dml.color import RGBColor
+from pptx.enum.text import MSO_ANCHOR
 from typing import List, Dict
 
 class LyricsPPTCreator:
@@ -21,9 +22,9 @@ class LyricsPPTCreator:
         self.prs.slide_width = Inches(16)
         self.prs.slide_height = Inches(9)
         
-        # 모든 텍스트 폰트 크기를 60pt로 통일
-        self.title_font_size = Pt(60)
-        self.body_font_size = Pt(60)
+        # 모든 텍스트 폰트 크기를 42pt로 통일
+        self.title_font_size = Pt(42)
+        self.body_font_size = Pt(42)
         self.font_name = "맑은 고딕"
         
     def create_title_slide(self, title: str, artist: str = None):
@@ -68,61 +69,57 @@ class LyricsPPTCreator:
         
         return slide
         
-    def create_slide(self, lyrics_text: str, slide_title: str = None):
+    def create_slide(self, title=None, content=None):
         """
-        가사 텍스트로 슬라이드를 생성합니다.
+        슬라이드를 생성합니다.
         
         Args:
-            lyrics_text: 슬라이드에 표시할 가사 텍스트
-            slide_title: 슬라이드 제목 (기본값: None)
+            title: 슬라이드 제목 (기본값: None)
+            content: 슬라이드 내용 (기본값: None)
         """
         # 빈 슬라이드 추가
-        slide_layout = self.prs.slide_layouts[5]  # 제목 및 콘텐츠 없는 빈 레이아웃
-        slide = self.prs.slides.add_slide(slide_layout)
+        slide = self.prs.slides.add_slide(self.prs.slide_layouts[6])  # 빈 레이아웃
         
-        # 슬라이드 배경을 검은색으로 설정
+        # 배경을 검은색으로 설정
         background = slide.background
         fill = background.fill
         fill.solid()
-        fill.fore_color.rgb = RGBColor(0, 0, 0)  # 검은색 (RGB: 0, 0, 0)
+        fill.fore_color.rgb = RGBColor(0, 0, 0)  # 검은색
+        
+        # 텍스트 박스 위치 조정 - 상단 중앙으로 이동
+        left = Inches(1.0)
+        top = Inches(1.0)  # 상단으로 위치 이동
+        width = Inches(14.0)
+        height = Inches(7.0)
         
         # 텍스트 상자 추가
-        left = Inches(0.5)
-        top = Inches(1.5)
-        width = Inches(15)  # 16:9 비율에 맞춰 조정
-        height = Inches(6)  # 16:9 비율에 맞춰 조정
+        txBox = slide.shapes.add_textbox(left, top, width, height)
+        tf = txBox.text_frame
+        tf.word_wrap = True
+        tf.vertical_anchor = MSO_ANCHOR.TOP  # 상단 위치로 조정
         
-        textbox = slide.shapes.add_textbox(left, top, width, height)
-        text_frame = textbox.text_frame
-        text_frame.word_wrap = True
-        
-        # 제목이 있는 경우 제목 추가
-        if slide_title:
-            p = text_frame.paragraphs[0]
-            p.text = slide_title
+        # 제목 텍스트 추가
+        if title:
+            p = tf.add_paragraph()
+            p.text = title
+            p.font.size = self.title_font_size
+            p.font.name = self.font_name
+            p.font.color.rgb = RGBColor(255, 255, 255)  # 흰색
+            p.font.bold = True
             p.alignment = PP_ALIGN.CENTER
             
-            # 제목 서식 설정
-            font = p.font
-            font.name = self.font_name
-            font.size = self.title_font_size
-            font.bold = True
-            font.color.rgb = RGBColor(255, 255, 255)  # 흰색 (RGB: 255, 255, 255)
+        # 내용 텍스트 추가
+        if content:
+            if title:  # 제목이 있으면 공백 추가
+                p = tf.add_paragraph()
+                p.text = ""
             
-            # 가사를 위한 새로운 단락 추가
-            p = text_frame.add_paragraph()
-        else:
-            p = text_frame.paragraphs[0]
-        
-        # 가사 텍스트 추가
-        p.text = lyrics_text
-        p.alignment = PP_ALIGN.CENTER
-        
-        # 가사 텍스트 서식 설정
-        font = p.font
-        font.name = self.font_name
-        font.size = self.body_font_size  # 가사도 60pt로 설정
-        font.color.rgb = RGBColor(255, 255, 255)  # 흰색 (RGB: 255, 255, 255)
+            p = tf.add_paragraph()
+            p.text = content
+            p.font.size = self.body_font_size
+            p.font.name = self.font_name
+            p.font.color.rgb = RGBColor(255, 255, 255)  # 흰색
+            p.alignment = PP_ALIGN.CENTER
         
         return slide
     
@@ -141,7 +138,7 @@ class LyricsPPTCreator:
         
         # 가사 슬라이드 추가
         for lyrics_page in lyrics_pages:
-            self.create_slide(lyrics_page)
+            self.create_slide(content=lyrics_page)
             
     def save_presentation(self, output_file: str = None):
         """

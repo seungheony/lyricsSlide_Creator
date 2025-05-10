@@ -122,21 +122,47 @@ def cleanup_temp_files(pdf_file, modified_pptx_file, ppt_file, pptx_file):
     except Exception as e:
         print(f"임시 파일 정리 중 오류 발생: {e}")
 
-def convert_ppt_files(ppt_files, output_dir):
-    """여러 PPT 파일을 이미지로 변환합니다."""
-    all_image_paths = []
-
-    for i, ppt_file in enumerate(ppt_files, 1):
-        ppt_name = os.path.basename(ppt_file)
-        print(f"[{i}/{len(ppt_files)}] '{ppt_name}' 처리 중...")
+def convert_ppt_files(input_dir, output_dir):
+    """
+    입력 디렉토리의 모든 PPT/PPTX 파일을 이미지로 변환합니다.
+    
+    Args:
+        input_dir: 입력 PPT 파일이 있는 디렉토리
+        output_dir: 출력 이미지를 저장할 디렉토리
         
-        # PPT 파일을 이미지로 변환
-        image_paths = convert_ppt_to_images(ppt_file, output_dir)
+    Returns:
+        변환된 PPT 파일 목록
+    """
+    # 입력 디렉토리에서 모든 PPT/PPTX 파일 찾기
+    ppt_files = []
+    for file in os.listdir(input_dir):
+        if file.lower().endswith(('.pptx', '.ppt')):
+            ppt_files.append(os.path.join(input_dir, file))
+    
+    # 파일이 없으면 종료
+    if not ppt_files:
+        print("변환할 PPT/PPTX 파일이 없습니다.")
+        return []
+    
+    converted_files = []
+    
+    # 각 PPT 파일을 이미지로 변환
+    for ppt_file in ppt_files:
+        file_basename = os.path.basename(ppt_file).split('.')[0]
+        # 각 PPT 파일마다 별도의 하위 디렉토리 생성
+        ppt_output_dir = os.path.join(output_dir, file_basename)
+        os.makedirs(ppt_output_dir, exist_ok=True)
         
-        if image_paths:
-            print(f"  {len(image_paths)}개의 슬라이드를 이미지로 변환했습니다.")
-            all_image_paths.append((ppt_name, image_paths))
-        else:
-            print(f"  '{ppt_name}' 파일 변환에 실패했습니다.")
-
-    return all_image_paths
+        try:
+            # PPT를 이미지로 변환
+            convert_ppt_to_images(ppt_file, ppt_output_dir)
+            converted_files.append({
+                'source': ppt_file,
+                'output_dir': ppt_output_dir,
+                'basename': file_basename
+            })
+            print(f"변환 완료: {ppt_file} -> {ppt_output_dir}")
+        except Exception as e:
+            print(f"변환 실패: {ppt_file} - {str(e)}")
+    
+    return converted_files

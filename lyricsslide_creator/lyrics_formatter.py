@@ -345,3 +345,25 @@ class LyricsFormatter:
             formatted_pages.append(page_info)
         
         return formatted_pages
+
+def split_lyrics_pages(song_info, max_lines_per_page=2):
+    """가사를 페이지 단위로 분할합니다. (한 페이지에 2줄씩)"""
+    
+    lyrics = song_info['lyrics']
+    if not lyrics:
+        return []
+    
+    # 줄 단위로 분리
+    lines = lyrics.strip().split('\n')
+    
+    # 공백 줄 제거
+    lines = [line for line in lines if line.strip()]
+    
+    # max_lines_per_page(2줄)씩 묶어서 페이지 생성
+    pages = []
+    for i in range(0, len(lines), max_lines_per_page):
+        page_lines = lines[i:i + max_lines_per_page]
+        page = '\n'.join(page_lines)
+        pages.append(page)
+    
+    return pages
