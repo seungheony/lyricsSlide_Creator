@@ -363,7 +363,6 @@ def run_ppt_convert():
         # 변환 실패 시 종료
         if not converted_files:
             print("PPT 변환에 실패했습니다.")
-            # cleanup_temp_files 함수 수정 (매개변수 없이 호출)
             import shutil
             shutil.rmtree(temp_output_dir, ignore_errors=True)
             return
@@ -389,35 +388,11 @@ def run_ppt_convert():
                 output_pptx_files.append(output_file)
                 print(f"생성 완료: {output_file}")
             except Exception as e:
-                # invert_colors 매개변수 오류 발생 시 기본 호출
-                print(f"참고: {str(e)}")
-                print("기본 설정으로 생성합니다.")
-                create_presentation(output_file, ppt_output_dir)
-                output_pptx_files.append(output_file)
-                print(f"생성 완료: {output_file}")
+                print(f"변환 중 오류 발생: {str(e)}")
+                continue
         
-        # 여러 PPT가 있을 경우 자동 병합 (질문 없이)
         if len(output_pptx_files) > 1:
-            print("\n여러 개의 PPT 파일이 생성되었습니다. 자동으로 병합합니다...")
-            
-            from lyricsslide_creator.pptx_creator import merge_presentations
-            merged_file = os.path.join(output_dir, f"병합된_악보_{timestamp}.pptx")
-            
-            # 병합 수행
-            success = merge_presentations(output_pptx_files, merged_file)
-            
-            # 병합 성공 시 개별 PPT 파일 삭제
-            if success and os.path.exists(merged_file):
-                print(f"\n모든 PPT 파일이 병합되었습니다: {merged_file}")
-                print("개별 PPT 파일을 삭제합니다...")
-                
-                for ppt_file in output_pptx_files:
-                    try:
-                        if os.path.exists(ppt_file):
-                            os.remove(ppt_file)
-                            print(f"삭제됨: {os.path.basename(ppt_file)}")
-                    except Exception as e:
-                        print(f"파일 삭제 실패: {os.path.basename(ppt_file)} - {e}")
+            print(f"\n총 {len(output_pptx_files)}개의 PPT 파일이 생성되었습니다.")
         
         # 임시 폴더 정리
         import shutil
