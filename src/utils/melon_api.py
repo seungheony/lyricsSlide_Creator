@@ -33,10 +33,15 @@ class MelonScraper:
                     
                     artist_div = row.select_one('#artistName')
                     artist = artist_div.get_text(strip=True) if artist_div else "아티스트 미상"
+                    # 중복 아티스트명 제거 (예: "아티스트아티스트" -> "아티스트")
+                    if artist and len(artist) > 0 and len(artist) % 2 == 0:
+                        half = len(artist) // 2
+                        if artist[:half] == artist[half:]:
+                            artist = artist[:half]
                     
                     album_link = row.select_one('a[href*="goAlbumDetail"]')
                     album = album_link.get_text(strip=True) if album_link else "앨범 미상"
-                    
+
                     if song_id:
                         results.append({'song_id': song_id, 'title': title, 'artist': artist, 'album': album})
                 except: continue
@@ -61,3 +66,15 @@ class MelonScraper:
             
             return {'song_id': song_id, 'lyrics': lyrics, 'image_url': image_url}
         except: return None
+
+    def get_album_image_url(self, song_id):
+        """곡 상세 페이지에서 앨범아트 URL만 가져온다."""
+        if not song_id: return ''
+        try:
+            url = f"https://www.melon.com/song/detail.htm?songId={song_id}"
+            response = requests.get(url, headers=self.headers, timeout=10)
+            soup = BeautifulSoup(response.text, 'html.parser')
+            img_tag = soup.select_one('.thumb img')
+            return img_tag['src'] if img_tag else ''
+        except:
+            return ''
