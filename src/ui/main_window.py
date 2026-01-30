@@ -3,7 +3,7 @@ import os
 import requests
 import traceback
 from PyQt6.QtWidgets import (
-    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, 
+    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLineEdit,
     QPushButton, QListWidget, QListWidgetItem, QLabel, QStackedWidget,
     QSplitter, QTextEdit, QFileDialog, QMessageBox, QProgressBar, QFrame
 )
@@ -74,7 +74,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("Lyrics Slide Creator"); self.resize(1000, 800)
         self.scraper = MelonScraper(); self.template_path = resource_path("template.pptx")
-        self._threads = []
+        self._threads = []; self.slide_chunks = []
         self.setStyleSheet(GLOBAL_STYLE)
         self.stack = QStackedWidget(); self.setCentralWidget(self.stack)
         self.create_search_page(); self.create_editor_page()
@@ -95,10 +95,13 @@ class MainWindow(QMainWindow):
         self.info_lbl = QLabel("노래 정보"); self.info_lbl.setStyleSheet("font-size:16px;font-weight:bold;")
         top.addWidget(back); top.addWidget(self.editor_art); top.addSpacing(10); top.addWidget(self.info_lbl); top.addStretch(); layout.addLayout(top)
         split = QSplitter(Qt.Orientation.Horizontal); left = QWidget(); l_ly = QVBoxLayout(left); l_ly.addWidget(QLabel("가사 편집")); self.lyrics_edit = QTextEdit(); self.lyrics_edit.setStyleSheet(TEXT_EDIT_STYLE); l_ly.addWidget(self.lyrics_edit)
-        btns = QHBoxLayout(); 
-        for n in [2, 4]:
+        btns = QHBoxLayout()
+        for n in [1, 2]:
             b = QPushButton(f"{n}줄씩"); b.setStyleSheet(SECONDARY_BUTTON_STYLE); b.clicked.connect(lambda _, n=n: self.apply_split(n)); btns.addWidget(b)
-        l_ly.addLayout(btns); right = QWidget(); r_ly = QVBoxLayout(right); r_ly.addWidget(QLabel("미리보기")); self.prev_list = QListWidget(); self.prev_list.setStyleSheet(LIST_WIDGET_STYLE); r_ly.addWidget(self.prev_list)
+        l_ly.addLayout(btns); right = QWidget(); r_ly = QVBoxLayout(right); r_ly.addWidget(QLabel("미리보기"))
+        self.prev_list = QListWidget(); self.prev_list.setStyleSheet(LIST_WIDGET_STYLE + "\nQListWidget::item { padding: 4px 6px; }")
+        self.prev_list.itemDoubleClicked.connect(self.on_slide_double_click)
+        r_ly.addWidget(self.prev_list)
         split.addWidget(left); split.addWidget(right); layout.addWidget(split)
         bottom = QFrame(); bl = QHBoxLayout(bottom); self.tmpl_lbl = QLabel(f"템플릿: {os.path.basename(self.template_path)}"); btn_tmpl = QPushButton("변경"); btn_tmpl.setStyleSheet(SECONDARY_BUTTON_STYLE); btn_tmpl.clicked.connect(self.choose_template)
         btn_gen = QPushButton("PPT 생성"); btn_gen.setStyleSheet(BUTTON_STYLE); btn_gen.clicked.connect(self.generate_ppt)
@@ -143,8 +146,61 @@ class MainWindow(QMainWindow):
         if px.loadFromData(data): self.editor_art.setPixmap(px)
 
     def apply_split(self, n):
+        self.slide_chunks = PPTBuilder.split_lyrics(self.lyrics_edit.toPlainText(), n)
+        self.refresh_preview()
+
+    def refresh_preview(self):
         self.prev_list.clear()
-        for i, c in enumerate(PPTBuilder.split_lyrics(self.lyrics_edit.toPlainText(), n)): self.prev_list.addItem(f"[슬라이드 {i+1}]\n{c}")
+        for i, c in enumerate(self.slide_chunks):
+            self.prev_list.addItem(f"[슬라이드 {i+1}]\n{c}")
+
+    def on_slide_double_click(self, item):
+        idx = self.prev_list.row(item)
+        lines = self.slide_chunks[idx].split('\n')
+        if len(lines) >= 2:
+            self.split_slide_at(idx)
+        elif idx > 0:
+            self.merge_slide_up(idx)
+
+    def merge_slide_up(self, idx):
+        current = self.slide_chunks[idx]
+        prev = self.slide_chunks[idx - 1]
+        msg = QMessageBox(self)
+        msg.setWindowTitle("병합 방식 선택")
+        msg.setText(f"'{current}'을(를) 이전 슬라이드에 어떻게 병합할까요?")
+        btn_append = msg.addButton("이어붙이기", QMessageBox.ButtonRole.AcceptRole)
+        btn_newline = msg.addButton("다음 줄에 추가", QMessageBox.ButtonRole.AcceptRole)
+        msg.addButton("취소", QMessageBox.ButtonRole.RejectRole)
+        msg.exec()
+        clicked = msg.clickedButton()
+        if clicked == btn_newline:
+            self.slide_chunks[idx - 1] = prev + "\n" + current
+        elif clicked == btn_append:
+            lines = prev.split('\n')
+            lines[-1] = lines[-1] + " " + current
+            self.slide_chunks[idx - 1] = "\n".join(lines)
+        else:
+            return
+        del self.slide_chunks[idx]
+        self.refresh_preview()
+
+    def split_slide_at(self, idx):
+        lines = self.slide_chunks[idx].split('\n')
+        if len(lines) < 2:
+            return
+        first_line = lines[0]
+        remaining = lines[1:]
+        # Flatten all lines from remaining + subsequent slides
+        rest_lines = remaining
+        for chunk in self.slide_chunks[idx + 1:]:
+            rest_lines.extend(chunk.split('\n'))
+        # Rebuild: keep slides before idx, add single-line slide, then re-chunk rest 2 lines at a time
+        new_chunks = self.slide_chunks[:idx]
+        new_chunks.append(first_line)
+        for i in range(0, len(rest_lines), 2):
+            new_chunks.append("\n".join(rest_lines[i:i + 2]))
+        self.slide_chunks = new_chunks
+        self.refresh_preview()
 
     def choose_template(self):
         p, _ = QFileDialog.getOpenFileName(self, "PPT 템플릿", "", "PowerPoint (*.pptx)");
@@ -167,7 +223,7 @@ class MainWindow(QMainWindow):
 
         try:
             # 1. 메모리에 PPT 생성
-            chunks = PPTBuilder.split_lyrics(lyrics_text, 2)
+            chunks = self.slide_chunks if self.slide_chunks else PPTBuilder.split_lyrics(lyrics_text, 2)
             builder = PPTBuilder(self.template_path)
             ppt_buffer = builder.generate_slides_to_memory(chunks)
             
