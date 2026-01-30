@@ -1,53 +1,20 @@
-# 빌드 및 배포 파일
+# Python
+__pycache__/
+*.pyc
+venv/
+
+# PyInstaller
 build/
 dist/
 *.spec
-*.egg-info/
 
-# 파이썬 캐시 파일
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-
-# 가상 환경
-venv/
-env/
-ENV/
-.env
-.venv
-.Python
-build_env/
-.venv_info.json
-
-# 임시 폴더 및 파일
-converted_images/
-temp/
-tmp/
-
-# 개발 환경 설정
-.idea/
-.vscode/
-*.swp
-*.swo
-
-# macOS 시스템 파일
+# macOS
 .DS_Store
-.AppleDouble
-.LSOverride
 
-# Windows 시스템 파일
-Thumbs.db
-ehthumbs.db
-Desktop.ini
-
-# 생성된 PPT 파일
+# Test/Output files
+test_output.pptx
 *.pptx
-!template_*.pptx  # 템플릿 파일은 제외 (필요시 주석 해제)
+!template.pptx # template.pptx는 예외적으로 포함
 
-# 로그 파일
-*.log
-
-# 개인 설정 파일
-.env.local
-.env.*.local
+# Bundled external dependencies (very large files)
+bundled/
